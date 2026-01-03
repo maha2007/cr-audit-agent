@@ -1,0 +1,30 @@
+{
+  "patterns": {
+    "Invoice Number": [
+      "invoice\\s*#?:?\\s*(\\w+)",
+      "inv\\s*#?:?\\s*(\\w+)",
+      "invoice\\s*number:?\\s*(\\w+)"
+    ],
+    "Date": [
+      "date:?\\s*([\\d/\\-]+)",
+      "dated:?\\s*([\\d/\\-]+)",
+      "date\\s*of\\s*issue:?\\s*([\\d/\\-]+)"
+    ],
+    "Total Amount": [
+      "total:?\\s*\\$?([\\d,]+[.]?\\d{2})",
+      "amount:?\\s*\\$?([\\d,]+[.]?\\d{2})",
+      "total\\s*amount:?\\s*\\$?([\\d,]+[.]?\\d{2})"
+    ],
+    "Email": [
+      "email:?\\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})",
+      "e-mail:?\\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})"
+    ],
+    "Phone Number": [
+      "phone:?\\s*([\\d\\s\\-\\(\\)]+)",
+      "tel:?\\s*([\\d\\s\\-\\(\\)]+)",
+      "telephone:?\\s*([\\d\\s\\-\\(\\)]+)"
+    ]
+  },
+  "ner_labels": ["DATE", "MONEY", "ORG", "PERSON", "GPE", "EMAIL"]
+}
+
