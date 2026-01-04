@@ -35,32 +35,43 @@ class ExtractionIntegration:
             outstanding_limit: Outstanding limit
             
         Returns:
-            Combined extraction data dictionary
+            Combined extraction data dictionary with 'errors' key if any failures occurred
         """
         all_extractions = {}
         combined_data = {
             "obligor_name": obligor_name,
             "outstanding_limit": outstanding_limit,
-            "documents": []
+            "documents": [],
+            "errors": []  # Track errors for better error reporting
         }
         
         # Initialize Claude extractor and parser
-        claude_extractor = ClaudeExtractor(output_dir=str(self.output_dir))
-        markdown_parser = MarkdownParser(output_dir=str(self.output_dir))
-        schematizer = DataSchematizer(output_dir=str(self.output_dir))
+        try:
+            claude_extractor = ClaudeExtractor(output_dir=str(self.output_dir))
+            markdown_parser = MarkdownParser(output_dir=str(self.output_dir))
+            schematizer = DataSchematizer(output_dir=str(self.output_dir))
+        except Exception as e:
+            combined_data["errors"].append(f"Failed to initialize extractors: {str(e)}")
+            return combined_data
         
         for idx, pdf_file in enumerate(pdf_files):
             # Handle different file input types
             if hasattr(pdf_file, 'name'):  # Streamlit UploadedFile
-                pdf_path = self._save_uploaded_file(pdf_file, idx)
-                doc_name = pdf_file.name
+                try:
+                    pdf_path = self._save_uploaded_file(pdf_file, idx)
+                    doc_name = pdf_file.name
+                except Exception as e:
+                    combined_data["errors"].append(f"Failed to save uploaded file {pdf_file.name}: {str(e)}")
+                    continue
             elif isinstance(pdf_file, (str, Path)):  # File path
                 pdf_path = Path(pdf_file)
                 doc_name = pdf_path.name
             else:
+                combined_data["errors"].append(f"Unsupported file type: {type(pdf_file)}")
                 continue
             
             if not pdf_path.exists():
+                combined_data["errors"].append(f"File not found: {doc_name}")
                 continue
             
             # Extract from PDF using Claude
@@ -68,8 +79,16 @@ class ExtractionIntegration:
                 # Step 1: Convert PDF to Markdown using Claude
                 markdown = claude_extractor.extract(str(pdf_path))
                 
+                if not markdown or len(markdown.strip()) == 0:
+                    combined_data["errors"].append(f"Empty extraction result for {doc_name}. The PDF may be corrupted or unreadable.")
+                    continue
+                
                 # Step 2: Parse Markdown into structured format
                 parsed_data = markdown_parser.parse_markdown_to_pages(markdown, doc_name)
+                
+                if not parsed_data:
+                    combined_data["errors"].append(f"Failed to parse Markdown for {doc_name}. The PDF content may not be extractable.")
+                    continue
                 
                 # Step 3: Extract text for schematizer (combine all text from all pages)
                 all_text = []
@@ -82,10 +101,14 @@ class ExtractionIntegration:
                 # Step 4: Apply schematizer to extract key-value pairs
                 schematized_data = {}
                 if full_text:
-                    kv_pairs = schematizer.extract(full_text)
-                    # Distribute key-value pairs across pages (or keep at document level)
-                    for page_key in parsed_data.keys():
-                        schematized_data[page_key] = kv_pairs
+                    try:
+                        kv_pairs = schematizer.extract(full_text)
+                        # Distribute key-value pairs across pages (or keep at document level)
+                        for page_key in parsed_data.keys():
+                            schematized_data[page_key] = kv_pairs
+                    except Exception as e:
+                        # Schematizer errors are non-critical, continue without key-value pairs
+                        print(f"Warning: Schematizer failed for {doc_name}: {str(e)}")
                 
                 # Step 5: Combine extractions for this document
                 doc_data = self._combine_extractions(
@@ -97,12 +120,24 @@ class ExtractionIntegration:
                     "pages": doc_data
                 })
                 
+            except FileNotFoundError as e:
+                combined_data["errors"].append(f"File not found: {doc_name} - {str(e)}")
+            except ValueError as e:
+                # API key or configuration errors
+                combined_data["errors"].append(f"Configuration error for {doc_name}: {str(e)}")
+            except RuntimeError as e:
+                # API errors (rate limits, overloaded, etc.)
+                error_msg = str(e)
+                if "rate_limit" in error_msg.lower() or "overloaded" in error_msg.lower():
+                    combined_data["errors"].append(f"Claude API is rate-limited or overloaded. Please try again in a few moments. Error: {str(e)}")
+                else:
+                    combined_data["errors"].append(f"Claude API error for {doc_name}: {str(e)}")
             except Exception as e:
-                # Log error but continue with other PDFs
-                print(f"Error processing {doc_name}: {e}")
+                # Generic errors
                 import traceback
-                traceback.print_exc()
-                continue
+                error_details = traceback.format_exc()
+                combined_data["errors"].append(f"Error processing {doc_name}: {str(e)}")
+                print(f"Full error traceback for {doc_name}:\n{error_details}")
             finally:
                 # Clean up temporary file if it was uploaded
                 if hasattr(pdf_file, 'name') and pdf_path.exists():
