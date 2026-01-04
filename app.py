@@ -151,17 +151,22 @@ def process_audit(uploaded_files, obligor_name, outstanding_limit, model, thinki
                     st.error(f"  • {error}")
             
             if not combined_data.get("documents"):
+                # Show detailed error information
                 if errors:
+                    st.error("❌ PDF extraction failed with the following errors:")
+                    for i, error in enumerate(errors, 1):
+                        st.error(f"{i}. {error}")
                     st.error("\n💡 **Troubleshooting tips:**")
                     st.info("""
-                    - Ensure PDFs are not password-protected
-                    - Check that PDFs contain selectable text (not just scanned images)
-                    - Verify your API key is correctly set in Streamlit Secrets
-                    - Try uploading a smaller PDF first to test
-                    - Check Streamlit Cloud logs for detailed error information
+                    - **API Key**: Verify `ANTHROPIC_API_KEY` is correctly set in Streamlit Secrets (Settings → Secrets)
+                    - **PDF Format**: Ensure PDFs are not password-protected and contain selectable text
+                    - **File Size**: Very large PDFs may timeout - try a smaller file first
+                    - **Network**: Check Streamlit Cloud logs for network/API connection issues
+                    - **Rate Limits**: If you see rate-limit errors, wait a few moments and try again
                     """)
                 else:
-                    st.error("❌ Failed to extract data from PDFs. No documents were processed.")
+                    st.error("❌ Failed to extract data from PDFs. No documents were processed and no specific errors were captured.")
+                    st.info("💡 This might indicate an issue with file upload or initialization. Check Streamlit Cloud logs for details.")
                 st.session_state.processing = False
                 return
             

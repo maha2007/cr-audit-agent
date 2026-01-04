@@ -54,6 +54,10 @@ class ExtractionIntegration:
             combined_data["errors"].append(f"Failed to initialize extractors: {str(e)}")
             return combined_data
         
+        if not pdf_files:
+            combined_data["errors"].append("No PDF files provided for processing.")
+            return combined_data
+        
         for idx, pdf_file in enumerate(pdf_files):
             # Handle different file input types
             if hasattr(pdf_file, 'name'):  # Streamlit UploadedFile
@@ -62,6 +66,8 @@ class ExtractionIntegration:
                     doc_name = pdf_file.name
                 except Exception as e:
                     combined_data["errors"].append(f"Failed to save uploaded file {pdf_file.name}: {str(e)}")
+                    import traceback
+                    combined_data["errors"].append(f"Traceback: {traceback.format_exc()}")
                     continue
             elif isinstance(pdf_file, (str, Path)):  # File path
                 pdf_path = Path(pdf_file)
@@ -71,7 +77,7 @@ class ExtractionIntegration:
                 continue
             
             if not pdf_path.exists():
-                combined_data["errors"].append(f"File not found: {doc_name}")
+                combined_data["errors"].append(f"File not found: {doc_name} (path: {pdf_path})")
                 continue
             
             # Extract from PDF using Claude
@@ -133,10 +139,16 @@ class ExtractionIntegration:
                 else:
                     combined_data["errors"].append(f"Claude API error for {doc_name}: {str(e)}")
             except Exception as e:
-                # Generic errors
+                # Generic errors - capture full details
                 import traceback
                 error_details = traceback.format_exc()
-                combined_data["errors"].append(f"Error processing {doc_name}: {str(e)}")
+                error_type = type(e).__name__
+                combined_data["errors"].append(f"Error processing {doc_name}: {error_type} - {str(e)}")
+                # Include more context in the error message
+                if "api" in str(e).lower() or "anthropic" in str(e).lower():
+                    combined_data["errors"].append(f"  → This appears to be an API-related issue. Check your ANTHROPIC_API_KEY in Streamlit Secrets.")
+                elif "key" in str(e).lower():
+                    combined_data["errors"].append(f"  → API key issue detected. Verify ANTHROPIC_API_KEY is set correctly.")
                 print(f"Full error traceback for {doc_name}:\n{error_details}")
             finally:
                 # Clean up temporary file if it was uploaded
